@@ -1,5 +1,14 @@
 # Shiori
 
+从 https://github.com/go-shiori/shiori fork 并二次开发
+
+## script
+
+```
+go build
+./shiori serve -p 8080
+```
+
 [![IC](https://github.com/go-shiori/shiori/actions/workflows/push.yml/badge.svg?branch=master)](https://github.com/go-shiori/shiori/actions/workflows/push.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/go-shiori/shiori)](https://goreportcard.com/report/github.com/go-shiori/shiori)
 [![#shiori@libera.chat](https://img.shields.io/badge/irc-%23shiori-orange)](https://web.libera.chat/#shiori)
