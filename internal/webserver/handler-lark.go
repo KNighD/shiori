@@ -134,10 +134,10 @@ func notify(receiveId string) {
 // 飞书机器人 API
 func (h *handler) HandleLarkMessage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	data, err := ioutil.ReadAll(r.Body)
+	fmt.Printf("from feishu bot：%s\n", string(data))
 	checkError(err)
 	var event LarkMessageEvent
 	json.Unmarshal(data, &event)
-	fmt.Println("from feishu bot：", event)
 	w.Header().Set("Content-Type", "application/json")
 	if event.Schema == "" {
 		var verifyEvent UrlVerificationEvent
