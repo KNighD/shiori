@@ -68,6 +68,10 @@ type Event struct {
 }
 
 type LarkMessageEvent struct {
+	Encrypt string `json:"encrypt"`
+}
+
+type MessageEvent struct {
 	Schema string      `json:"schema"`
 	Header EventHeader `json:"header"`
 	Event  Event       `json:"event"`
@@ -173,23 +177,32 @@ func (h *handler) HandleLarkMessage(w http.ResponseWriter, r *http.Request, ps h
 	fmt.Printf("from feishu bot：%s\n", string(data))
 	checkError(err)
 	var event LarkMessageEvent
-	json.Unmarshal(data, &event)
+	err = json.Unmarshal(data, &event)
+	checkError(err)
+	s := ""
+	s, err = Decrypt(event.Encrypt, larkConfig.EncryptKey)
+	checkError(err)
+	jsonMap := map[string]interface {
+	}{}
+	json.Unmarshal([]byte(s), &jsonMap)
 	w.Header().Set("Content-Type", "application/json")
-	if event.Schema == "" {
-		var verifyEvent UrlVerificationEvent
-		err := json.Unmarshal(data, &verifyEvent)
-		checkError(err)
-		s, err := Decrypt(verifyEvent.Encrypt, larkConfig.EncryptKey)
-		checkError(err)
-		jsonMap := map[string]interface {
-		}{}
-		json.Unmarshal([]byte(s), &jsonMap)
+	if jsonMap["challenge"] != nil {
 		resp := map[string]interface{}{
 			"challenge": jsonMap["challenge"],
 		}
 		err = json.NewEncoder(w).Encode(&resp)
 		checkError(err)
 	} else {
-		notify(event.Event.Sender.SenderID.OpenID)
+		var messageEvent MessageEvent
+		json.Unmarshal([]byte(s), &messageEvent)
+		checkError(err)
+		fmt.Printf("bot received：%v\n", messageEvent)
+		notify(messageEvent.Event.Sender.SenderID.OpenID)
+		resp := map[string]interface {
+		}{
+			"message": "success",
+		}
+		err = json.NewEncoder(w).Encode(&resp)
+		checkError(err)
 	}
 }
