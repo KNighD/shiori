@@ -203,7 +203,7 @@ func ServeApp(cfg Config) error {
 	router.POST(jp("/api/accounts"), withLogging(hdl.apiInsertAccount))
 	router.DELETE(jp("/api/accounts"), withLogging(hdl.apiDeleteAccount))
 
-	router.POST(jp("/api/feishu/registry"), hdl.feishuRegistry)
+	router.POST(jp("/api/lark/message"), hdl.HandleLarkMessage)
 
 	// Route for panic, keep logging anyhow
 	router.PanicHandler = func(w http.ResponseWriter, r *http.Request, arg interface{}) {
