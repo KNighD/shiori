@@ -2,11 +2,17 @@ package webserver
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/larksuite/oapi-sdk-go/api/core/response"
@@ -69,9 +75,7 @@ type LarkMessageEvent struct {
 
 // robot verification
 type UrlVerificationEvent struct {
-	Type      string `json:"url_verification"`
-	Challenge string `json:"challenge"`
-	Token     string `json:"token"`
+	Encrypt string `json:"encrypt"`
 }
 
 type LarkConfig struct {
@@ -82,14 +86,14 @@ type LarkConfig struct {
 }
 
 var conf *config.Config
+var larkConfig LarkConfig
 
 func init() {
 	file, err := filepath.Abs("./lark-config.json")
 	checkError(err)
 	data, err := ioutil.ReadFile(file)
 	checkError(err)
-	var config LarkConfig
-	err = json.Unmarshal(data, &config)
+	err = json.Unmarshal(data, &larkConfig)
 	checkError(err)
 	// 企业自建应用的配置
 	// @see https://github.com/larksuite/oapi-sdk-go/blob/main/README.zh.md
@@ -98,14 +102,46 @@ func init() {
 	// HelpDeskID、HelpDeskToken, 服务台 token：https://open.feishu.cn/document/ukTMukTMukTM/ugDOyYjL4gjM24CO4IjN
 	// 更多介绍请看：Github->README.zh.md->如何构建应用配置（AppSettings）
 	appSettings := core.NewInternalAppSettings(
-		core.SetAppCredentials(config.AppID, config.AppSecret),           // 必需
-		core.SetAppEventKey(config.VerificationToken, config.EncryptKey), // 非必需，订阅事件、消息卡片时必需
+		core.SetAppCredentials(larkConfig.AppID, larkConfig.AppSecret),           // 必需
+		core.SetAppEventKey(larkConfig.VerificationToken, larkConfig.EncryptKey), // 非必需，订阅事件、消息卡片时必需
 	// core.SetHelpDeskCredentials("HelpDeskID", "HelpDeskToken")
 	) // 非必需，使用服务台API时必需
 
 	// 当前访问的是飞书，使用默认的内存存储（app/tenant access token）、默认日志（Error级别）
 	// 更多介绍请看：Github->README.zh.md->如何构建整体配置（Config）
 	conf = core.NewConfig(core.DomainFeiShu, appSettings, core.SetLoggerLevel(core.LoggerLevelError))
+}
+
+func Decrypt(encrypt string, key string) (string, error) {
+	buf, err := base64.StdEncoding.DecodeString(encrypt)
+	if err != nil {
+		return "", fmt.Errorf("base64StdEncode Error[%v]", err)
+	}
+	if len(buf) < aes.BlockSize {
+		return "", errors.New("cipher  too short")
+	}
+	keyBs := sha256.Sum256([]byte(key))
+	block, err := aes.NewCipher(keyBs[:sha256.Size])
+	if err != nil {
+		return "", fmt.Errorf("AESNewCipher Error[%v]", err)
+	}
+	iv := buf[:aes.BlockSize]
+	buf = buf[aes.BlockSize:]
+	// CBC mode always works in whole blocks.
+	if len(buf)%aes.BlockSize != 0 {
+		return "", errors.New("ciphertext is not a multiple of the block size")
+	}
+	mode := cipher.NewCBCDecrypter(block, iv)
+	mode.CryptBlocks(buf, buf)
+	n := strings.Index(string(buf), "{")
+	if n == -1 {
+		n = 0
+	}
+	m := strings.LastIndex(string(buf), "}")
+	if m == -1 {
+		m = len(buf) - 1
+	}
+	return string(buf[n : m+1]), nil
 }
 
 func notify(receiveId string) {
@@ -143,8 +179,13 @@ func (h *handler) HandleLarkMessage(w http.ResponseWriter, r *http.Request, ps h
 		var verifyEvent UrlVerificationEvent
 		err := json.Unmarshal(data, &verifyEvent)
 		checkError(err)
+		s, err := Decrypt(verifyEvent.Encrypt, larkConfig.EncryptKey)
+		checkError(err)
+		jsonMap := map[string]interface {
+		}{}
+		json.Unmarshal([]byte(s), &jsonMap)
 		resp := map[string]interface{}{
-			"challenge": verifyEvent.Challenge,
+			"challenge": jsonMap["challenge"],
 		}
 		err = json.NewEncoder(w).Encode(&resp)
 		checkError(err)
