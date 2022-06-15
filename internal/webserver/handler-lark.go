@@ -2,17 +2,11 @@ package webserver
 
 import (
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
-	"strings"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/larksuite/oapi-sdk-go/api/core/response"
@@ -116,38 +110,6 @@ func init() {
 	conf = core.NewConfig(core.DomainFeiShu, appSettings, core.SetLoggerLevel(core.LoggerLevelError))
 }
 
-func Decrypt(encrypt string, key string) (string, error) {
-	buf, err := base64.StdEncoding.DecodeString(encrypt)
-	if err != nil {
-		return "", fmt.Errorf("base64StdEncode Error[%v]", err)
-	}
-	if len(buf) < aes.BlockSize {
-		return "", errors.New("cipher  too short")
-	}
-	keyBs := sha256.Sum256([]byte(key))
-	block, err := aes.NewCipher(keyBs[:sha256.Size])
-	if err != nil {
-		return "", fmt.Errorf("AESNewCipher Error[%v]", err)
-	}
-	iv := buf[:aes.BlockSize]
-	buf = buf[aes.BlockSize:]
-	// CBC mode always works in whole blocks.
-	if len(buf)%aes.BlockSize != 0 {
-		return "", errors.New("ciphertext is not a multiple of the block size")
-	}
-	mode := cipher.NewCBCDecrypter(block, iv)
-	mode.CryptBlocks(buf, buf)
-	n := strings.Index(string(buf), "{")
-	if n == -1 {
-		n = 0
-	}
-	m := strings.LastIndex(string(buf), "}")
-	if m == -1 {
-		m = len(buf) - 1
-	}
-	return string(buf[n : m+1]), nil
-}
-
 func notify(receiveId string) {
 	imService := im.NewService(conf)
 	coreCtx := core.WrapContext(context.Background())
@@ -174,17 +136,15 @@ func notify(receiveId string) {
 // 飞书机器人 API
 func (h *handler) HandleLarkMessage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	data, err := ioutil.ReadAll(r.Body)
-	fmt.Printf("from feishu bot：%s\n", string(data))
 	checkError(err)
 	var event LarkMessageEvent
 	err = json.Unmarshal(data, &event)
 	checkError(err)
-	s := ""
-	s, err = Decrypt(event.Encrypt, larkConfig.EncryptKey)
+	decryptedBody, err := tools.Decrypt(data, larkConfig.EncryptKey)
 	checkError(err)
 	jsonMap := map[string]interface {
 	}{}
-	json.Unmarshal([]byte(s), &jsonMap)
+	json.Unmarshal(decryptedBody, &jsonMap)
 	w.Header().Set("Content-Type", "application/json")
 	if jsonMap["challenge"] != nil {
 		resp := map[string]interface{}{
@@ -194,15 +154,15 @@ func (h *handler) HandleLarkMessage(w http.ResponseWriter, r *http.Request, ps h
 		checkError(err)
 	} else {
 		var messageEvent MessageEvent
-		json.Unmarshal([]byte(s), &messageEvent)
+		json.Unmarshal(decryptedBody, &messageEvent)
 		checkError(err)
 		fmt.Printf("bot received：%v\n", messageEvent)
-		notify(messageEvent.Event.Sender.SenderID.OpenID)
 		resp := map[string]interface {
 		}{
 			"message": "success",
 		}
 		err = json.NewEncoder(w).Encode(&resp)
 		checkError(err)
+		notify(messageEvent.Event.Sender.SenderID.OpenID)
 	}
 }

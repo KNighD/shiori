@@ -2,6 +2,19 @@
 
 从 https://github.com/go-shiori/shiori fork 并二次开发
 
+## 配置
+
+在项目根目录下添加 lark-config.json 形如
+
+```json
+{
+  "AppID": string,
+  "AppSecret": string,
+  "VerificationToken": string,
+  "EncryptKey": string
+}
+```
+
 ## script
 
 ```
