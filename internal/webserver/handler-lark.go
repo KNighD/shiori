@@ -135,9 +135,9 @@ func notify(receiveId string) {
 func (h *handler) HandleLarkMessage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	data, err := ioutil.ReadAll(r.Body)
 	checkError(err)
-	fmt.Println("from feishu bot：", data)
 	var event LarkMessageEvent
 	json.Unmarshal(data, &event)
+	fmt.Println("from feishu bot：", event)
 	w.Header().Set("Content-Type", "application/json")
 	if event.Schema == "" {
 		var verifyEvent UrlVerificationEvent
