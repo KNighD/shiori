@@ -13,6 +13,7 @@ import (
 	"github.com/larksuite/oapi-sdk-go/core"
 	"github.com/larksuite/oapi-sdk-go/core/config"
 	"github.com/larksuite/oapi-sdk-go/core/tools"
+	doc "github.com/larksuite/oapi-sdk-go/service/docx/v1"
 	im "github.com/larksuite/oapi-sdk-go/service/im/v1"
 )
 
@@ -81,6 +82,7 @@ type LarkConfig struct {
 	AppSecret         string
 	VerificationToken string
 	EncryptKey        string
+	FolderToken 			string
 }
 
 var conf *config.Config
@@ -133,6 +135,27 @@ func notify(receiveId string) {
 	fmt.Println(tools.Prettify(message))
 }
 
+func createDoc() {
+	docService := doc.NewService(conf)
+	coreCtx := core.WrapContext(context.Background())
+	reqCall :=docService.Documents.Create(coreCtx, &doc.DocumentCreateReqBody{
+		FolderToken: larkConfig.FolderToken,
+		Title:       "TestCreateDoc",
+	})
+	message, err := reqCall.Do()
+	// 打印 request_id 方便 oncall 时排查问题
+	fmt.Println(coreCtx.GetRequestID())
+	fmt.Println(coreCtx.GetHTTPStatusCode())
+	if err != nil {
+		fmt.Println(tools.Prettify(err))
+		e := err.(*response.Error)
+		fmt.Println(e.Code)
+		fmt.Println(e.Msg)
+		return
+	}
+	fmt.Println(tools.Prettify(message))
+}
+
 // 飞书机器人 API
 func (h *handler) HandleLarkMessage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	data, err := ioutil.ReadAll(r.Body)
@@ -163,6 +186,7 @@ func (h *handler) HandleLarkMessage(w http.ResponseWriter, r *http.Request, ps h
 		}
 		err = json.NewEncoder(w).Encode(&resp)
 		checkError(err)
+		createDoc()
 		notify(messageEvent.Event.Sender.SenderID.OpenID)
 	}
 }
